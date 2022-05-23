@@ -4,25 +4,79 @@ name: test
 
 on:
   push:
-    branches: [ main, release ]
+    branches: [ main, release, test-code-coverage ]
   pull_request:
     branches: [ main, release ]
 
   workflow_dispatch:
 
 jobs:
-  test:
+  jest:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-node@v2
         with:
           node-version: '14'
-
       - name: Run install
         run: npm i -g lerna && npm run bootstrap
-
-      - name: Run test
+      - name: Run Jest test
         run: npm run test:coverage
+      - name: Archive Jest coverage
+        uses: actions/upload-artifact@v3
+        with:
+          if-no-files-found: error
+          name: jest-coverage
+          path: test/coverage/coverage-final.json
+  cypress:
+    runs-on: ubuntu-latest
+    container: 
+      image: cypress/browsers:node14.17.6-chrome100-ff98
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v2
+        with:
+          node-version: '14'
+      - name: Run install
+        run: |
+          npm i -g lerna
+          npm run bootstrap
+      - name: Cypress Tests - Chrome
+        uses: cypress-io/github-action@v2
+        with:
+          # we have already installed all dependencies above
+          install: true
+          start: npm run start
+          wait-on: 'http://localhost:6006'
+          wait-on-timeout: 600
+          browser: chrome
+          record: false
+          parallel: false
+          spec: cypress/integration/*
+      - name: Archive Cypress coverage
+        uses: actions/upload-artifact@v3
+        with:
+          if-no-files-found: error
+          name: cypress-coverage
+          path: cypress/coverage/coverage-final.json
+  coverage:
+    runs-on: ubuntu-latest
+    needs: [jest, cypress]
+    steps:
+      - uses: actions/setup-node@v2
+        with:
+          node-version: '14'
+      - name: Download Jest coverage
+        uses: actions/download-artifact@v3
+        with:
+          name: jest-coverage
+          path: test/coverage
+      - name: Download Cypress coverage
+        uses: actions/download-artifact@v3
+        with:
+          name: cypress-coverage
+          path: cypress/coverage
+      - name: Code coverage merge
+        run: npx istanbul-combine -d test/merged -p detail -r lcov -r json cypress/coverage/coverage-final.json test/coverage/coverage-final.json
       - name: Run codecov
-        run: npx codecov --token=${{ secrets.CODECOV_TOKEN }}
+        run: npx codecov --token=${{ secrets.CODECOV_TOKEN }} --file=test/merged/coverage-final.json
