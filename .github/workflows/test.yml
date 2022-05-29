@@ -26,7 +26,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           if-no-files-found: error
-          name: jest-coverage
+          name: jest
           path: test/coverage/coverage-final.json
   cypress:
     runs-on: ubuntu-latest
@@ -46,12 +46,12 @@ jobs:
       - name: Serve storybook
         run: nohup npx http-server -p 6006 storybook-static &
       - name: Run Cypress test
-        run: npx wait-on http://127.0.0.1:6006 && ./node_modules/.bin/cypress run -s cypress/**/inputNumber.spec.js
+        run: npx wait-on http://127.0.0.1:6006 && ./node_modules/.bin/cypress run
       - name: Archive Cypress coverage
         uses: actions/upload-artifact@v3
         with:
           if-no-files-found: error
-          name: cypress-coverage
+          name: cypress
           path: cypress/coverage/coverage-final.json
   coverage:
     runs-on: ubuntu-latest
@@ -64,22 +64,12 @@ jobs:
       - name: Download Jest coverage
         uses: actions/download-artifact@v3
         with:
-          name: jest-coverage
-          path: test/coverage/coverage-final.json
-      - name: Download Cypress coverage
-        uses: actions/download-artifact@v3
-        with:
-          name: cypress-coverage
-          path: cypress/coverage/coverage-final.json
-      - name: Install istanbul-combine
-        run: npm install -g istanbul-combine
-      - name: Pre merge
-        run: |
-          tree -L 1
-          tree -L 2 test && tree -L 2 cypress
+          # upload jest and cypress coverage to output dir
+          path: output
       - name: Code coverage merge
-        run: NODE_OPTIONS="--no-warnings" istanbul-combine -d test/merged -p detail -r lcov -r json cypress/coverage/coverage-final.json test/coverage/coverage-final.json
-      - name: After merge
-        run: tree -L 2 test
+        run: |
+          tree output
+          npx istanbul-combine -d test/merged -p detail -r lcov -r json output/cypress/coverage-final.json output/cypress/coverage-final.json
+          tree test/merged
       - name: Run codecov
         run: npx codecov --token=${{ secrets.CODECOV_TOKEN }} --file=test/merged/coverage-final.json
